@@ -1,0 +1,111 @@
+name: InsightForge CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop # 偵測 main 和 develop 分支的 push 事件
+  pull_request:
+    branches:
+      - main
+      - develop # 偵測 main 和 develop 分支的 pull request 事件
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest # 在 Ubuntu 環境下運行
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3 # 檢查程式碼
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2 # 配置 Docker Buildx，支援多架構構建
+
+      # --- Start Redis for local testing ---
+      # 為了讓 Laravel 和 FastAPI 的測試能夠訪問 Redis，我們在這裡啟動一個 Redis 容器
+      - name: Start Redis container
+        run: docker run -d --name test-redis -p 6379:6379 redis:6.2-alpine
+
+      # --- Laravel App Tests ---
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2 # 配置 PHP 環境
+        with:
+          php-version: '8.2' # 指定 PHP 版本
+          extensions: pdo_mysql, zip, bcmath, redis, gd, intl # 安裝 Laravel 和應用所需的 PHP 擴展
+          tools: composer # 安裝 Composer
+          coverage: none # 或者 xdebug, pcov 用於程式碼覆蓋率分析
+
+      - name: Install Laravel Composer Dependencies
+        run: composer install --no-dev --prefer-dist # 安裝 Laravel 依賴
+        working-directory: ./laravel-app # 在 laravel-app 目錄下運行
+
+      - name: Create Laravel .env file
+        run: | # 創建並初始化 Laravel 環境變數文件
+          cp .env.example .env
+          php artisan key:generate --ansi
+          echo "REDIS_HOST=localhost" >> .env # 指向本地啟動的 Redis
+          echo "REDIS_PORT=6379" >> .env
+          echo "FASTAPI_SERVICE_URL=http://localhost:8001" >> .env # 指向本地啟動的 FastAPI (如果需要整合測試)
+          echo "LARAVEL_WEBHOOK_SECRET=your_secret_key_here" >> .env # 確保與 FastAPI 測試環境一致
+        working-directory: ./laravel-app
+
+      - name: Run Laravel Database Migrations (for tests)
+        run: php artisan migrate --env=testing # 運行資料庫遷移以準備測試環境
+        working-directory: ./laravel-app
+
+      - name: Run Laravel Tests
+        run: php artisan pest # 運行 Laravel Pest 測試
+        working-directory: ./laravel-app
+
+      # --- FastAPI Service Tests ---
+      - name: Set up Python
+        uses: actions/setup-python@v4 # 配置 Python 環境
+        with:
+          python-version: '3.9' # 指定 Python 版本
+
+      - name: Install FastAPI Python Dependencies
+        run: pip install -r requirements.txt # 安裝 FastAPI 依賴
+        working-directory: ./ai-service
+
+      - name: Create FastAPI .env file
+        run: | # 創建並初始化 FastAPI 環境變數文件
+          echo "REDIS_HOST=localhost" >> .env # 指向本地啟動的 Redis
+          echo "REDIS_PORT=6379" >> .env
+          echo "LARAVEL_WEBHOOK_URL=http://localhost:8000/api/analysis/result" >> .env # 測試環境回調 URL
+          echo "LARAVEL_WEBHOOK_SECRET=your_secret_key_here" >> .env # 確保與 Laravel 測試環境一致
+        working-directory: ./ai-service
+
+      - name: Run FastAPI Tests
+        run: pytest tests/ # 運行 FastAPI pytest 測試
+        working-directory: ./ai-service
+
+      # --- Docker Image Build (Optional: 如果需要推送到 Docker Hub) ---
+      # 建議只在 push 到主分支時才推送映像檔
+      - name: Login to Docker Hub (optional)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push' # 僅在 push 到 main 分支時登入
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }} # 從 GitHub Secrets 獲取 Docker Hub 用戶名
+          password: ${{ secrets.DOCKER_TOKEN }} # 從 GitHub Secrets 獲取 Docker Hub 令牌
+
+      - name: Build and push Laravel Docker image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v4
+        with:
+          context: ./laravel-app
+          file: ./laravel-app/Dockerfile
+          push: true # 設置為 true 以推送到 Docker Hub
+          tags: yourusername/insightforge-laravel:latest # 替換為你的 Docker Hub 用戶名
+
+      - name: Build and push FastAPI Docker image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v4
+        with:
+          context: ./ai-service
+          file: ./ai-service/Dockerfile
+          push: true
+          tags: yourusername/insightforge-fastapi:latest # 替換為你的 Docker Hub 用戶名
+
+      - name: Cleanup Redis container
+        if: always() # 確保即使前續步驟失敗也運行此步驟
+        run: docker rm -f test-redis # 清理測試用的 Redis 容器
