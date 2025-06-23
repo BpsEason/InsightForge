@@ -1,17 +1,23 @@
 # InsightForge 🧠🔥
 
+[![CI Status](https://github.com/BpsEason/InsightForge/actions/workflows/ci.yml/badge.svg)](https://github.com/BpsEason/InsightForge/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Docker Pulls](https://img.shields.io/docker/pulls/yourusername/insightforge)](https://hub.docker.com/r/yourusername/insightforge)
+
 **InsightForge** 是一個高效的 **AI 驅動數據分析平台**，採用 **Laravel + FastAPI** 微服務架構，結合 **Redis** 佇列與快取，實現模組化任務處理與即時分析。平台設計注重 **解耦**、**高性能** 與 **可擴展性**，適用於智能客服、推薦系統、金融風控等企業級應用。
+
+> **GitHub 描述**：Modular AI analysis platform built with Laravel + FastAPI. Queue-powered, cache-accelerated, and production-ready.
 
 ---
 
 ## 🌟 專案亮點
 
-- **微服務解耦**：Laravel 負責業務邏輯與 API，FastAPI 專注 AI 推論，獨立開發與部署，提升靈活性。
-- **異步高效**：Redis 佇列削峰填谷，支援高併發任務處理。
+- **微服務解耦**：Laravel 負責業務邏輯與 API，FastAPI 專注 AI 推論，獨立開發與部署。
+- **異步高效**：Redis 佇列削峰填谷，支援高併發任務。
 - **即時快取**：Redis 儲存任務狀態與結果，TTL 自動清理，降低資料庫壓力。
 - **安全保障**：HMAC 簽名驗證 Webhook，Docker 網路隔離，確保通訊安全。
 - **容器化部署**：Docker Compose 提供環境一致性，支援快速擴展。
-- **自動化 CI/CD**：GitHub Actions 實現測試與部署，加速開發迭代。
+- **自動化 CI/CD**：GitHub Actions 實現測試與部署，加速迭代。
 
 ---
 
@@ -34,23 +40,23 @@ graph TD
 
 ## ⚙️ 關鍵技術與設計決策
 
-- **Laravel 10**：提供 RESTful API、任務管理與 MySQL 持久化，負責業務邏輯與用戶交互。
-- **FastAPI**：異步處理 AI 推論，Pydantic 驗證資料，支援 Webhook 回調。
-- **Redis**：作為佇列（異步任務）與快取（任務狀態，TTL 100 秒），提升性能與可靠性。
-- **MySQL**：儲存任務、結果與日誌，支援狀態追蹤。
-- **Nginx**：反向代理，統一流量入口，優化性能與安全。
-- **Docker Compose**：容器編排，解決依賴衝突，確保環境一致。
-- **GitHub Actions**：自動化測試與 Docker 映像推送，簡化 CI/CD。
+- **Laravel 10**：RESTful API、任務管理、MySQL 持久化，負責業務邏輯。
+- **FastAPI**：異步 AI 推論，Pydantic 驗證，支援 Webhook 回調。
+- **Redis**：佇列（異步任務）與快取（任務狀態，TTL 100 秒），提升性能。
+- **MySQL**：儲存任務、結果與日誌，支援追蹤。
+- **Nginx**：反向代理，統一流量入口，增強安全。
+- **Docker Compose**：容器編排，確保環境一致。
+- **GitHub Actions**：自動化測試與映像推送。
 
 **技術選型**：
-- **Laravel + FastAPI**：Laravel 擅長 Web 應用，FastAPI 與 Python AI 生態相容，實現專業分工。挑戰在於跨語言通訊（HTTP/Webhook）與運維複雜度。
-- **Redis**：支援高併發與快取，無 Redis 將導致同步阻塞與資料庫壓力。
-- **Docker**：提供環境一致性與服務隔離，支援水平擴展，簡化部署。
+- **Laravel + FastAPI**：Laravel 擅長 Web 應用，FastAPI 與 Python AI 生態相容，實現分工解耦。挑戰在於跨語言通訊與運維複雜度。
+- **Redis**：支援高併發，無 Redis 將導致阻塞與資料庫壓力。
+- **Docker**：提供環境一致性與隔離，簡化部署。
 
 **角色分工**：
-- **Laravel**：API 入口、任務創建、資料持久化、Webhook 接收。
-- **FastAPI**：AI 推論、結果快取、Webhook 回調。
-- **協作**：Redis 佇列與 Webhook 實現異步通訊，HMAC 簽名確保安全。
+- Laravel：API 入口、任務創建、資料持久化、Webhook 接收。
+- FastAPI：AI 推論、結果快取、Webhook 回調。
+- 協作：Redis 佇列與 Webhook 實現異步通訊，HMAC 簽名確保安全。
 
 ---
 
@@ -73,7 +79,14 @@ graph TD
 - Python 3.9+
 - Git
 
-### 設置與啟動
+### 一鍵部署
+運行自定腳本，自動完成環境設置與容器啟動：
+```bash
+chmod +x bin/setup.sh
+./bin/setup.sh
+```
+
+### 手動設置
 
 1. **克隆專案**：
    ```bash
@@ -124,7 +137,7 @@ graph TD
 
 ## 🔄 任務處理流程
 
-1. **上傳資料**：用戶 POST `/api/data/upload`，Laravel 驗證 JSON，創建 `AnalysisTask`（UUID），推至 Redis 佇列。
+1. **上傳資料**：POST `/api/data/upload`，Laravel 驗證 JSON，創建 `AnalysisTask`（UUID），推至 Redis 佇列。
 2. **任務執行**：`Laravel Worker` 監聽佇列，調用 FastAPI `/analyze`。
 3. **AI 推論**：FastAPI 執行模擬模型，結果存 Redis（TTL 100 秒），Webhook 回調 Laravel。
 4. **結果儲存**：Laravel 驗證簽名，更新 MySQL（`AnalysisTask` 與 `AnalysisResult`）。
@@ -151,6 +164,8 @@ InsightForge/
 │   ├── tests/
 │   ├── .env.example
 │   └── Dockerfile
+├── bin/
+│   └── setup.sh
 ├── nginx/nginx.conf
 ├── docker-compose.yml
 └── .github/workflows/ci.yml
@@ -269,15 +284,44 @@ async def analyze_task(request: AnalyzeRequest):
 
 ---
 
+## 📜 API 文件與測試
+
+### Swagger 文檔
+FastAPI 提供內建 Swagger UI，訪問 `http://localhost/fastapi/docs` 查看 `/analyze` 端點詳情：
+- **POST /analyze**：接收任務資料，執行 AI 推論，返回任務 ID。
+
+### Postman 測試示例
+1. **上傳任務**：
+   ```bash
+   curl -X POST http://localhost/api/data/upload \
+   -H "Content-Type: application/json" \
+   -d '{"data":"{\"text\":\"好消息！\"}","task_type":"sentiment_analysis","model_version":"v1.0"}'
+   ```
+   回應：
+   ```json
+   {"message":"任務已接收","task_id":"uuid"}
+   ```
+
+2. **查詢結果**：
+   - 透過 Redis 或 MySQL 查詢任務狀態（未來可實現 `/api/result/{task_id}`）。
+   - FastAPI Webhook 回調自動更新 MySQL。
+
+**測試流程**：
+- 使用 Postman 發送 `/api/data/upload` 請求，觀察 Redis 佇列（`docker-compose logs laravel-worker`）。
+- 檢查 FastAPI 日誌（`docker-compose logs ai-service`），確認推論完成。
+- 驗證 MySQL `analysis_tasks` 表，確保狀態更新。
+
+---
+
 ## 🛠️ 技術細節
 
-- **任務可靠性**：`ProcessAnalysisTask` Job 支援 3 次重試與 120 秒超時，記錄 `TaskLog` 確保可追蹤。
-- **資料驗證與安全**：FastAPI 使用 Pydantic 驗證輸入，HMAC 簽名保護 Webhook，Docker 網路隔離限制外部訪問。
-- **模型管理**：模擬模型（`MockAIModel`）支援簡單推論，未來可動態載入真實模型（如 Transformers），透過版本字典管理：
+- **任務可靠性**：`ProcessAnalysisTask` Job 支援 3 次重試與 120 秒超時，記錄 `TaskLog` 確保追蹤。
+- **資料驗證與安全**：FastAPI 使用 Pydantic 驗證，HMAC 簽名保護 Webhook，Docker 網路隔離限制訪問。
+- **模型管理**：模擬模型（`MockAIModel`）支援簡單推論，未來可動態載入真實模型（如 Transformers）：
   ```python
   model_instances = {"v1.0": RealAIModel("v1.0"), "v1.1": RealAIModel("v1.1")}
   ```
-- **Docker 配置**：`depends_on` 與 `healthcheck` 確保服務啟動順序，Nginx 提供負載均衡與安全防護（如 `X-Frame-Options`）。
+- **Docker 配置**：`depends_on` 與 `healthcheck` 確保啟動順序，Nginx 提供負載均衡與安全防護。
 
 ---
 
@@ -299,14 +343,10 @@ async def analyze_task(request: AnalyzeRequest):
    - 查看日誌：`docker-compose logs laravel-worker`。
 
 4. **測試 API？**
-   ```bash
-   curl -X POST http://localhost/api/data/upload \
-   -H "Content-Type: application/json" \
-   -d '{"data":"{\"text\":\"好消息！\"}","task_type":"sentiment_analysis","model_version":"v1.0"}'
-   ```
+   - 參見「API 文件與測試」中的 Postman 示例。
 
 5. **擴展模型？**
-   - 修改 `ai-service/model/your_model.py`，實現真實模型（如 Transformers）。
+   - 修改 `ai-service/model/your_model.py`，實現真實模型。
    - 更新 `requirements.txt`（如 `transformers`、`torch`）。
 
 ---
@@ -314,9 +354,9 @@ async def analyze_task(request: AnalyzeRequest):
 ## 💡 性能與擴展
 
 - **任務激增**：
-  - Redis 佇列緩衝高併發，支援削峰填谷。
-  - 擴展 `laravel-worker` 或 `ai-service` 容器（`docker-compose scale`）。
-  - Nginx 負載均衡分擔流量：
+  - Redis 佇列緩衝，支援削峰填谷。
+  - 擴展容器：`docker-compose scale laravel-worker=3 ai-service=2`。
+  - Nginx 負載均衡：
     ```nginx
     upstream fastapi_servers {
         server ai-service-1:8001;
@@ -324,11 +364,11 @@ async def analyze_task(request: AnalyzeRequest):
     }
     ```
 - **模型更新**：藍綠部署，動態載入新模型，確保無停機。
-- **監控**：Prometheus + Grafana，關注 API 響應時間、佇列長度、CPU/記憶體使用率。
+- **監控**：Prometheus + Grafana，關注 API 響應時間、佇列長度、CPU/記憶體。
 - **異常處理**：
   - Job 重試（3 次）、超時（120 秒）。
   - Redis 快取結果，支援查詢。
-  - Laravel 使用事務確保最終一致性：
+  - Laravel 事務確保一致性：
     ```php
     DB::transaction(function () use ($task, $request) {
         $task->update([...]);
@@ -337,7 +377,7 @@ async def analyze_task(request: AnalyzeRequest):
     ```
 - **安全措施**：
   - OAuth2/JWT 認證保護 API。
-  - TLS 加密通訊，Nginx 速率限制。
+  - TLS 加密，Nginx 速率限制。
   - 敏感資料存於 `.env`，資料庫欄位加密。
 
 ---
@@ -345,24 +385,23 @@ async def analyze_task(request: AnalyzeRequest):
 ## 📈 未來展望
 
 - **功能擴展**：
-  - WebSocket 即時通知（Laravel Reverb 支援）。
-  - Vue + ECharts 儀表板展示分析結果。
+  - WebSocket 即時通知（Laravel Reverb）。
+  - Vue + ECharts 儀表板展示結果。
 - **雲部署**：
   - AWS ECS/EKS，RDS（MySQL）+ ElastiCache（Redis），Auto Scaling。
-  - GitHub Actions 推送映像至 ECR，自動化 CI/CD。
+  - GitHub Actions 推送映像至 ECR。
 - **模型管理**：
-  - 支援 A/B 測試，整合 MLflow 管理模型生命週期。
+  - A/B 測試，整合 MLflow 管理模型。
   - 動態載入模型，減少記憶體開銷。
 - **新功能開發**：
-  - 新增 AI 模型（如文本分類），流程：
+  - 新增模型（如文本分類），流程：
     1. 更新 `ai-service/model/your_model.py`（如 BERT）。
-    2. 修改 FastAPI 的 `task_type` 與 Laravel 驗證邏輯。
-    3. 測試並部署新映像。
+    2. 修改 FastAPI `task_type` 與 Laravel 驗證。
+    3. 測試並部署。
 
 **雲部署示例**：
 ```yaml
 # ECS Task Definition
-version: '1.0'
 services:
   laravel-app:
     image: yourusername/insightforge-laravel:latest
