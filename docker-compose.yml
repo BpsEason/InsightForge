@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  # Nginx 反向代理服務 (Web Server)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: insightforge_nginx
+    ports:
+      - "80:80" # 將主機的80端口映射到Nginx的80端口
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf # 掛載 Nginx 配置
+      - ./laravel-app:/var/www/html # 掛載 Laravel 應用程式代碼 (僅用於 Nginx 靜態文件和 PHP-FPM 訪問)
+    depends_on:
+      laravel-app:
+        condition: service_healthy # Nginx 依賴 Laravel FPM 服務的健康狀態
+    networks:
+      - insightforge_network
+    healthcheck: # Nginx 服務健康檢查
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Laravel 應用程式服務 (PHP-FPM)
+  laravel-app:
+    build:
+      context: ./laravel-app
+      dockerfile: Dockerfile
+    image: yourusername/insightforge-laravel:latest # 請替換 yourusername
+    container_name: insightforge_laravel_app
+    volumes:
+      - ./laravel-app:/var/www/html # 將本地程式碼映射到容器內
+      - laravel_logs:/var/www/html/storage/logs # 持久化 Laravel 日誌
+    depends_on:
+      redis:
+        condition: service_healthy # Laravel 依賴 Redis 健康
+      ai-service:
+        condition: service_healthy # Laravel 依賴 AI 服務健康
+      db: # 如果啟用MySQL，則加入此行
+        condition: service_healthy
+    networks:
+      - insightforge_network
+    environment:
+      - APP_NAME=InsightForge
+      - APP_ENV=local
+      - APP_KEY= # 請手動填寫 APP_KEY
+      - APP_DEBUG=true
+      - APP_URL=http://laravel-app # Docker 內部 URL，由 Nginx 代理
+      - LOG_CHANNEL=daily # Laravel 日誌切割為每日
+      # 資料庫設定 (如果啟用 MySQL)
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=insightforge_db
+      - DB_USERNAME=user
+      - DB_PASSWORD=password
+
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      - QUEUE_CONNECTION=redis # 設定 Laravel 佇列使用 Redis
+
+      - FASTAPI_SERVICE_URL=http://ai-service:8001 # FastAPI 服務的內部 Docker 網路位址
+      - FASTAPI_TIMEOUT_SECONDS=90 # Laravel Job等待FastAPI響應的超時時間
+      - LARAVEL_WEBHOOK_SECRET= # 請手動填寫 Webhook Secret
+    healthcheck: # Laravel 服務健康檢查
+      test: ["CMD", "curl", "-f", "http://localhost:9000/"] # 檢查 php-fpm 端口是否響應 (Nginx 代理前)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s # 啟動後等待30秒再開始檢查
+
+  # Laravel 佇列工作者服務 (可獨立擴展，處理異步任務)
+  laravel-worker:
+    build:
+      context: ./laravel-app
+      dockerfile: Dockerfile
+    image: yourusername/insightforge-laravel:latest # 請替換 yourusername
+    container_name: insightforge_laravel_worker
+    command: php artisan queue:work redis --tries=3 --timeout=120 --sleep=5 # 運行佇列監聽器
+    volumes:
+      - ./laravel-app:/var/www/html
+      - laravel_logs:/var/www/html/storage/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      - insightforge_network
+    environment: # 需要與 laravel-app 相同的環境變數
+      - APP_KEY= # 請手動填寫 APP_KEY
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - QUEUE_CONNECTION=redis
+      - FASTAPI_SERVICE_URL=http://ai-service:8001
+      - FASTAPI_TIMEOUT_SECONDS=90
+      - LARAVEL_WEBHOOK_SECRET= # 請手動填寫 Webhook Secret
+
+  # FastAPI AI 服務 (AI 模型推論)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    image: yourusername/insightforge-fastapi:latest # 請替換 yourusername
+    container_name: insightforge_fastapi_service
+    ports:
+      - "8001:8001" # 僅用於開發時直接訪問，生產環境通常不直接暴露
+    volumes:
+      - ./ai-service:/app
+      - fastapi_logs:/app/logs # 持久化 FastAPI 日誌
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - insightforge_network
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LARAVEL_WEBHOOK_URL=http://laravel-app/api/analysis/result
+      - LARAVEL_WEBHOOK_SECRET= # 請手動填寫 Webhook Secret
+      - TASK_PROCESSING_TIMEOUT=100
+    healthcheck: # FastAPI 服務健康檢查
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"] # 檢查根路由是否響應
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Redis 快取服務 (任務狀態與結果快取)
+  redis:
+    image: redis:6.2-alpine
+    container_name: insightforge_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - insightforge_network
+    command: redis-server --appendonly yes # 啟用 AOF 持久化
+    healthcheck: # Redis 服務健康檢查
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MySQL 資料庫服務 (如果 Laravel 需要持久化資料庫，推薦啟用)
+  db:
+    image: mysql:8.0
+    container_name: insightforge_mysql_db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: insightforge_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - insightforge_network
+    healthcheck: # MySQL 服務健康檢查
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$root_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  insightforge_network:
+    driver: bridge
+
+volumes:
+  redis_data: {} # Redis 資料持久化
+  laravel_logs: {} # Laravel 日誌持久化
+  fastapi_logs: {} # FastAPI 日誌持久化
+  db_data: {} # MySQL 資料持久化

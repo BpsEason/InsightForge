@@ -1,0 +1,14 @@
+fastapi[all]>=0.110.0
+uvicorn[standard]>=0.29.0
+python-dotenv>=1.0.0
+redis>=5.0.0
+requests>=2.31.0
+httpx>=0.27.0 # for async testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+# 你的 AI/ML 相關依賴 (例如，如果你要載入真正的模型)
+# scikit-learn
+# pandas
+# numpy
+# transformers
+# torch
