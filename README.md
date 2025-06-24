@@ -414,12 +414,6 @@ services:
 
 ---
 
-## 🤝 貢獻
-
-歡迎提交 Pull Request！請參考 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
-
----
-
 ## 📜 授權
 
 MIT License © BpsEason | InsightForge 2025+
